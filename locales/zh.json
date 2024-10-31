@@ -1,0 +1,8 @@
+{
+  "email_invalid": "邮箱格式无效",
+  "password_length": "密码长度必须至少为6位",
+  "email_or_password_invalid": "邮箱或密码无效",
+  "user_registered": "用户注册成功",
+  "user_login": "用户登录成功",
+  "server_error": "服务器错误"
+}

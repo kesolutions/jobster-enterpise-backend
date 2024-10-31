@@ -1,0 +1,8 @@
+{
+  "email_invalid": "Invalid email format",
+  "password_length": "Password must be at least 6 characters long",
+  "email_or_password_invalid": "Invalid email or password",
+  "user_registered": "User registered successfully",
+  "user_login": "User login successfully",
+  "server_error": "Server error"
+}

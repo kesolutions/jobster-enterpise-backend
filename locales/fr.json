@@ -1,0 +1,8 @@
+{
+  "email_invalid": "Format de courriel invalide",
+  "password_length": "Le mot de passe doit comporter au moins 6 caractères",
+  "email_or_password_invalid": "Courriel ou mot de passe invalide",
+  "user_registered": "Utilisateur enregistré avec succès",
+  "user_login": "Connexion utilisateur réussie",
+  "server_error": "Erreur du serveur"
+}
