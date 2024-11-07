@@ -1,12 +1,16 @@
 require("dotenv").config();
 const express = require("express");
+const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const { v4: uuidv4 } = require("uuid");
+const docxConverter = require("docx-pdf");
 const mongoose = require("./mongodb");
 const Company = require("../models/company");
 const User = require("../models/user");
+const Resume = require("../models/resume");
 
 if (!process.env.JWT_SECRET) {
   console.error("Missing JWT_SECRET in environment variables");
@@ -86,6 +90,64 @@ app.post("/companies", async (req, res) => {
   }
 });
 
+function removeStopWords(text) {
+  const stopWords = ["a", "the", "and", "or", "in", "to"];
+  return text.split(" ").filter(word => !stopWords.includes(word.toLowerCase())).join(" ");
+}
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "uploads/");
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
+
+app.post("/upload/resume", upload.single("file"), async (req, res) => {
+  try {
+    const file = req.file;
+    const { email, phone, location } = req.body;
+    const uuid = uuidv4();
+    const originalName = path.parse(file.originalname).name;
+
+    const originalFileName = `uploads/${originalName}_${uuid}.doc`;
+    const pdfFileName = `uploads/${originalName}_${uuid}.pdf`;
+
+    fs.renameSync(file.path, originalFileName);
+
+    await new Promise((resolve, reject) => {
+      docxConverter(originalFileName, pdfFileName, (err) => {
+        if (err) reject(err);
+        resolve();
+      });
+    });
+
+    const content = fs.readFileSync(originalFileName, "utf-8");
+    const contentSterilized = removeStopWords(content);
+
+    const resume = new Resume({
+      original_name: originalName,
+      original_file: originalFileName,
+      pdf_file: pdfFileName,
+      content: content,
+      content_sterilized: contentSterilized,
+      email,
+      phone,
+      location,
+      uuid
+    });
+    await resume.save();
+
+    res.status(201).json({ success: true, data: resume });
+  } catch (error) {
+    console.error("Error uploading resume:", error);
+    res.status(500).json({ success: false, message: "Error uploading resume" });
+  }
+});
 
 app.listen(3000, () => {
   console.log("Server is running on port 3000");
