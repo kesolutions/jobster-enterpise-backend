@@ -6,11 +6,13 @@ const path = require("path");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
-const docxConverter = require("docx-pdf");
-const mongoose = require("./mongodb");
+const { execSync } = require("child_process");
 const Company = require("../models/company");
 const User = require("../models/user");
 const Resume = require("../models/resume");
+const { removeStopWords } = require("../models/utils");
+const { bucket } = require('./gcsClient');
+const { uploadToCloudStorage } = require('./gcsClient');
 
 if (!process.env.JWT_SECRET) {
   console.error("Missing JWT_SECRET in environment variables");
@@ -90,62 +92,72 @@ app.post("/companies", async (req, res) => {
   }
 });
 
-function removeStopWords(text) {
-  const stopWords = ["a", "the", "and", "or", "in", "to"];
-  return text.split(" ").filter(word => !stopWords.includes(word.toLowerCase())).join(" ");
-}
-
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads/");
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: function (req, file, cb) {
+      cb(null, "uploads/");
+    },
+    filename: function (req, file, cb) {
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);
+      cb(null, file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname));
+    }
+  }),
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ["application/pdf", "text/plain", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+    if (!allowedTypes.includes(file.mimetype)) {
+      return cb(new Error("Only pdf, txt, doc, and docx files are allowed"));
+    }
+    cb(null, true);
   },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname));
-  }
 });
 
-const upload = multer({ storage: storage });
-
-app.post("/upload/resume", upload.single("file"), async (req, res) => {
+app.post("/upload/resume", upload.array("files", 10), async (req, res) => {
   try {
-    const file = req.file;
+    const files = req.files;
     const { email, phone, location } = req.body;
-    const uuid = uuidv4();
-    const originalName = path.parse(file.originalname).name;
+    if (!files || files.length === 0) {
+      return res.status(400).json({ success: false, message: "No files uploaded" });
+    }
 
-    const originalFileName = `uploads/${originalName}_${uuid}.doc`;
-    const pdfFileName = `uploads/${originalName}_${uuid}.pdf`;
+    const uploadedFiles = [];
+    for (const file of files) {
+      console.log(`Converting file: ${file.path}`);
+      try {
+        const gcsUrl = await uploadToCloudStorage(file.path);
+        const resume = new Resume({
+          original_name: file.originalname,
+          original_file: file.path,
+          pdf_file: gcsUrl,
+          content: "",
+          content_sterilized: "",
+          email: email || "",
+          phone: phone || "",
+          location: location || "",
+        });
+        await resume.save();
+        console.log("Resume saved successfully!");
 
-    fs.renameSync(file.path, originalFileName);
+        uploadedFiles.push({
+          originalName: file.originalname,
+          gcsUrl,
+        });
+      } catch (err) {
+        console.error(`Error uploading file ${file.originalname}:`, err);
+        return res.status(500).json({ success: false, message: `Failed to upload ${file.originalname}` });
+      } finally {
+        fs.unlinkSync(file.path);
+      }
+    }
 
-    await new Promise((resolve, reject) => {
-      docxConverter(originalFileName, pdfFileName, (err) => {
-        if (err) reject(err);
-        resolve();
-      });
+    res.status(200).json({
+      success: true,
+      message: "Files uploaded successfully",
+      data: uploadedFiles,
     });
-
-    const content = fs.readFileSync(originalFileName, "utf-8");
-    const contentSterilized = removeStopWords(content);
-
-    const resume = new Resume({
-      original_name: originalName,
-      original_file: originalFileName,
-      pdf_file: pdfFileName,
-      content: content,
-      content_sterilized: contentSterilized,
-      email,
-      phone,
-      location,
-      uuid
-    });
-    await resume.save();
-
-    res.status(201).json({ success: true, data: resume });
-  } catch (error) {
-    console.error("Error uploading resume:", error);
-    res.status(500).json({ success: false, message: "Error uploading resume" });
+  } catch (err) {
+    console.error("Error handling file upload:", err);
+    res.status(500).json({ success: false, message: "Error uploading files" });
   }
 });
 
