@@ -7,15 +7,17 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
 const { execSync } = require("child_process");
+const mongoose = require("./mongodb");
 const Company = require("../models/company");
 const User = require("../models/user");
 const Resume = require("../models/resume");
 const { removeStopWords } = require("../models/utils");
 const { bucket } = require('./gcsClient');
 const { uploadToCloudStorage } = require('./gcsClient');
+const authenticateToken = require("./auth");
+const { generateSignedUrl } = require("./gcsClient");
 
 if (!process.env.JWT_SECRET) {
-  console.error("Missing JWT_SECRET in environment variables");
   process.exit(1);
 }
 
@@ -50,7 +52,6 @@ app.post("/signup", async (req, res) => {
 
     res.status(201).json({ success: true, message: req.messages.user_registered });
   } catch (error) {
-    console.error("Error registering user:", error);
     res.status(500).json({ success: false, message: req.messages.server_error });
   }
 });
@@ -72,7 +73,6 @@ app.post("/login", async (req, res) => {
     const token = jwt.sign({ id: user._id, email: user.email }, process.env.JWT_SECRET, { expiresIn: "1h" });
     res.status(200).json({ success: true, message: req.messages.user_login });
   } catch (error) {
-    console.error("Error logging in:", error);
     res.status(500).json({ success: false, message: req.messages.server_error });
   }
 });
@@ -87,7 +87,6 @@ app.post("/companies", async (req, res) => {
     await company.save();
     res.status(201).json({ success: true, data: company });
   } catch (error) {
-    console.error("Error creating company:", error);
     res.status(400).json({ success: false, message: error.message });
   }
 });
@@ -112,39 +111,37 @@ const upload = multer({
   },
 });
 
-app.post("/upload/resume", upload.array("files", 10), async (req, res) => {
+app.post("/upload/resume", authenticateToken, upload.array("files", 10), async (req, res) => {
   try {
     const files = req.files;
     const { email, phone, location } = req.body;
+
     if (!files || files.length === 0) {
-      return res.status(400).json({ success: false, message: "No files uploaded" });
+      return res.status(400).json({ success: false, message: req.messages.no_files_uploaded });
     }
 
     const uploadedFiles = [];
     for (const file of files) {
-      console.log(`Converting file: ${file.path}`);
       try {
-        const gcsUrl = await uploadToCloudStorage(file.path);
+        const gcsFileName = await uploadToCloudStorage(file.path, file.originalname);
         const resume = new Resume({
           original_name: file.originalname,
           original_file: file.path,
-          pdf_file: gcsUrl,
-          content: "",
-          content_sterilized: "",
+          pdf_file: gcsFileName,
           email: email || "",
           phone: phone || "",
           location: location || "",
         });
+
         await resume.save();
-        console.log("Resume saved successfully!");
 
         uploadedFiles.push({
           originalName: file.originalname,
-          gcsUrl,
+          storedFileName: gcsFileName,
         });
       } catch (err) {
         console.error(`Error uploading file ${file.originalname}:`, err);
-        return res.status(500).json({ success: false, message: `Failed to upload ${file.originalname}` });
+        return res.status(500).json({ success: false, message: req.messages.upload_failed.replace("{file}", file.originalname) });
       } finally {
         fs.unlinkSync(file.path);
       }
@@ -152,15 +149,35 @@ app.post("/upload/resume", upload.array("files", 10), async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Files uploaded successfully",
+      message: req.messages.files_uploaded_successfully,
       data: uploadedFiles,
     });
   } catch (err) {
     console.error("Error handling file upload:", err);
-    res.status(500).json({ success: false, message: "Error uploading files" });
+    res.status(500).json({ success: false, message: req.messages.server_error });
+  }
+});
+app.get("/file/signed-url", authenticateToken, async (req, res) => {
+  const { fileName } = req.query;
+
+  if (!fileName) {
+    return res.status(400).json({ success: false, message: "File name is required" });
+  }
+
+  try {
+    const signedUrl = await generateSignedUrl(fileName);
+    res.status(200).json({
+      success: true,
+      message: "Signed URL generated successfully",
+      data: { signedUrl },
+    });
+  } catch (err) {
+    console.error("Error generating signed URL:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate signed URL",
+    });
   }
 });
 
-app.listen(3000, () => {
-  console.log("Server is running on port 3000");
-});
+app.listen(3000);

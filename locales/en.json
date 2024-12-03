@@ -4,5 +4,8 @@
   "email_or_password_invalid": "Invalid email or password",
   "user_registered": "User registered successfully",
   "user_login": "User login successfully",
-  "server_error": "Server error"
+  "server_error": "Server error",
+  "no_files_uploaded": "No files uploaded.",
+  "upload_failed": "Failed to upload {file}.",
+  "files_uploaded_successfully": "Files uploaded successfully."
 }

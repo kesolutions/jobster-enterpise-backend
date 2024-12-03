@@ -4,5 +4,8 @@
   "email_or_password_invalid": "Courriel ou mot de passe invalide",
   "user_registered": "Utilisateur enregistré avec succès",
   "user_login": "Connexion utilisateur réussie",
-  "server_error": "Erreur du serveur"
+  "server_error": "Erreur du serveur",
+  "no_files_uploaded": "Aucun fichier téléchargé.",
+  "upload_failed": "Échec du téléchargement de {file}.",
+  "files_uploaded_successfully": "Fichiers téléchargés avec succès."
 }

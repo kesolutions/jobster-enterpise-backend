@@ -5,34 +5,16 @@ const resumeSchema = new mongoose.Schema({
   uuid: {
     type: String,
     default: uuidv4,
+    unique: true
   },
-  original_name: {
-    type: String,
-    required: true,
-  },
-  original_file: {
-    type: String,
-    required: true,
-  },
-  pdf_file: {
-    type: String,
-    required: true,
-  },
-  content: {
-    type: String,
-  },
-  content_sterilized: {
-    type: String,
-  },
-  email: {
-    type: String,
-  },
-  phone: {
-    type: String,
-  },
-  location: {
-    type: String,
-  },
+  original_name: String,
+  original_file: String,
+  pdf_file: String,
+  content: String,
+  content_sterilized: String,
+  email: String,
+  phone: String,
+  location: String
 }, { timestamps: true });
 
 const Resume = mongoose.model("Resume", resumeSchema);
