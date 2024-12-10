@@ -13,10 +13,12 @@ const User = require("../models/user");
 const Resume = require("../models/resume");
 const { removeStopWords } = require("../models/utils");
 const { bucket } = require('./gcsClient');
+const { Storage } = require('@google-cloud/storage');
 const { uploadToCloudStorage } = require('./gcsClient');
 const authenticateToken = require("./auth");
 const { generateSignedUrl } = require("./gcsClient");
-
+const storage = new Storage();
+const bucketName = process.env.BUCKET_NAME;
 if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
