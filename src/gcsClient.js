@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require("uuid");
 const gcs = new Storage({
   keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
 });
-const bucketName = process.env.GCS_BUCKET_NAME;
+const bucketName = process.env.BUCKET_NAME;
 const bucket = gcs.bucket(bucketName);
 
 const uploadToCloudStorage = async (filePath, originalName) => {
